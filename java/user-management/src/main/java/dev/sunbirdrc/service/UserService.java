@@ -158,7 +158,7 @@ public class UserService {
                             .build();
                 } catch (NotAuthorizedException e) {
                     LOGGER.error("Credentials have authorization issue",e);
-                    throw new AuthorizationException("Invalid user cridentails");
+                    throw new AuthorizationException("Invalid user credentials");
                 } catch (Exception e) {
                     LOGGER.error("Unable to get user details",e);
                     throw new KeycloakUserException("Unable to get user details");
@@ -614,7 +614,7 @@ public class UserService {
                         throw new AuthorizationException("Credentials have authorization issue");
                     } catch (Exception e) {
                         e.printStackTrace();
-                        throw new KeycloakUserException("Unable to get user detils - Update user");
+                        throw new KeycloakUserException("Unable to get user details - Update user");
                     }
                 } else {
                     throw new OtpException("OTP mismatch");
