@@ -85,6 +85,7 @@ public class UserService {
     private JdbcTemplate jdbcTemplate;
 
     public UsersResource getSystemUsersResource(){
+
         return systemKeycloak.realm(valueMapper.getRealm()).users();
     }
 
@@ -782,7 +783,9 @@ public class UserService {
     }
 
     public boolean isUserExist(@NonNull String username) {
+        LOGGER.info("Check user exists payload ||| ------ {}", username);
         Optional<UserCredential> userCredentialOptional = userCredentialRepository.findByUserName(username);
+        LOGGER.info("Check user exists ||| response ------ {}", userCredentialOptional);
         if (userCredentialOptional.isPresent()) {
             return true;
         } else {
