@@ -43,13 +43,10 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 //                .oauth2ResourceServer()
 //                .jwt();
 
+
         http.csrf().disable()
                 .authorizeRequests()
-                .antMatchers("/**/keycloak/**", "/**/keycloak/**/**")
-                .authenticated()
-                .and()
-                .oauth2ResourceServer()
-                .jwt();
+                .antMatchers("**").permitAll();
 
 
     }
