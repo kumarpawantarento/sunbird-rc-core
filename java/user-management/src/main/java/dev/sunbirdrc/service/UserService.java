@@ -16,6 +16,7 @@ import dev.sunbirdrc.utils.OtpUtil;
 import dev.sunbirdrc.utils.UserConstant;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientsResource;
+import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.admin.client.token.TokenManager;
@@ -86,7 +87,11 @@ public class UserService {
 
     public UsersResource getSystemUsersResource(){
         LOGGER.info("getting system keycloak resource");
-        return systemKeycloak.realm(valueMapper.getRealm()).users();
+        RealmResource realmResource = systemKeycloak.realm(valueMapper.getRealm());
+        LOGGER.info("get realm details - {}", realmResource.toRepresentation().getAttributes());
+        UsersResource users = realmResource.users();
+        LOGGER.info("getting users - {}", users.list());
+        return users;
     }
 
     public CredentialRepresentation createPasswordCredentials(String password) {
@@ -107,7 +112,9 @@ public class UserService {
      * @return
      */
     public List<UserRepresentation> getUserDetails(String userName) {
-        return getSystemUsersResource().search(userName, true);
+        List<UserRepresentation> search = getSystemUsersResource().search(userName, true);
+        LOGGER.info("get user details - {}", search);
+        return search;
     }
 
 
