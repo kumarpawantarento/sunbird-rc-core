@@ -88,7 +88,7 @@ public class UserService {
     public UsersResource getSystemUsersResource(){
         LOGGER.info("getting system keycloak resource");
         RealmResource realmResource = systemKeycloak.realm(valueMapper.getRealm());
-        LOGGER.info("get realm details - {}", realmResource.toRepresentation().getAttributes());
+        LOGGER.info("get realm details - {}", realmResource.toString());
         UsersResource users = realmResource.users();
         LOGGER.info("getting users - {}", users.list());
         return users;
