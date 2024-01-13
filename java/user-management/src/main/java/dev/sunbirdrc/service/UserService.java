@@ -85,7 +85,7 @@ public class UserService {
     private JdbcTemplate jdbcTemplate;
 
     public UsersResource getSystemUsersResource(){
-
+        LOGGER.info("getting system keycloak resource");
         return systemKeycloak.realm(valueMapper.getRealm()).users();
     }
 

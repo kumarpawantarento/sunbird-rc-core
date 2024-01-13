@@ -1,5 +1,6 @@
 package dev.sunbirdrc.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jboss.resteasy.client.jaxrs.ResteasyClientBuilder;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.admin.client.Keycloak;
@@ -12,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 
 
 @Configuration
+@Slf4j
 public class KeycloakConfig {
     @Autowired
     private PropertiesValueMapper valueMapper;
@@ -19,6 +21,7 @@ public class KeycloakConfig {
     @Primary
     @Bean(name = "systemKeycloak")
     public Keycloak systemKeycloak() {
+        log.info("building system keycloak resource - {}", valueMapper.toString());
         return KeycloakBuilder.builder()
                 .serverUrl(valueMapper.getKeycloakServerUrl())
                 .realm(valueMapper.getRealm())
@@ -33,6 +36,7 @@ public class KeycloakConfig {
     }
 
     public Keycloak getUserKeycloak(String username, String password) {
+        log.info("building user keycloak resource - {}", valueMapper.toString());
         return KeycloakBuilder.builder()
                 .serverUrl(valueMapper.getKeycloakServerUrl())
                 .realm(valueMapper.getRealm())
