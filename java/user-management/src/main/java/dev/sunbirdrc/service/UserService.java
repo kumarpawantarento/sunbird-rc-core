@@ -786,6 +786,9 @@ public class UserService {
         LOGGER.info("Check user exists payload ||| ------ {}", username);
         Optional<UserCredential> userCredentialOptional = userCredentialRepository.findByUserName(username);
         LOGGER.info("Check user exists ||| response ------ {}", userCredentialOptional);
+        if(userCredentialOptional.isEmpty()) {
+            return false;
+        }
         if (userCredentialOptional.isPresent()) {
             return true;
         } else {
