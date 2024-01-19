@@ -1,7 +1,11 @@
 package dev.sunbirdrc.service;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.sunbirdrc.config.KeycloakConfig;
 import dev.sunbirdrc.config.PropertiesValueMapper;
 import dev.sunbirdrc.dto.*;
@@ -13,7 +17,9 @@ import dev.sunbirdrc.repository.UserCredentialRepository;
 import dev.sunbirdrc.repository.UserDetailsRepository;
 import dev.sunbirdrc.utils.CipherEncoder;
 import dev.sunbirdrc.utils.OtpUtil;
+import dev.sunbirdrc.utils.RedisUtil;
 import dev.sunbirdrc.utils.UserConstant;
+import lombok.extern.slf4j.Slf4j;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientsResource;
 import org.keycloak.admin.client.resource.RealmResource;
@@ -28,13 +34,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestTemplate;
 
 import javax.ws.rs.NotAuthorizedException;
 import javax.ws.rs.NotFoundException;
@@ -44,9 +51,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class UserService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
@@ -84,6 +93,22 @@ public class UserService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private RedisUtil redisUtil;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private PropertiesValueMapper propMapping;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper mapper;
+
 
     public UsersResource getSystemUsersResource(){
         LOGGER.info("getting system keycloak resource");
@@ -396,6 +421,214 @@ public class UserService {
             throw new InvalidInputDataException("User size limit crossed - Bulk user allowed size: " + valueMapper.getBulkUserSizeLimit());
         } else {
             return processBulkUserData(bulkUserDTOList);
+        }
+    }
+
+    public void pushBulkUserBG(BulkUserCreationDTO bulkUserCreationDTO){
+
+        if (bulkUserCreationDTO == null || bulkUserCreationDTO.getUserCreationList() == null
+                || bulkUserCreationDTO.getUserCreationList().isEmpty()) {
+            throw new InvalidInputDataException("Invalid user data to process");
+        } else if (bulkUserCreationDTO.getUserCreationList().size() > valueMapper.getBulkUserSizeLimit()) {
+            throw new InvalidInputDataException("User size limit crossed - Bulk user allowed size: " + valueMapper.getBulkUserSizeLimit());
+        } else if (!StringUtils.hasText(bulkUserCreationDTO.getEmail())){
+            throw new InvalidInputDataException("Invalid user data to process : master mail id is missing");
+        }else {
+            BulkCustomUserResponseDTO bulkCustomUserResponseDTO = processAffliationBulkUserData(bulkUserCreationDTO.getUserCreationList());
+
+            if (processHasuraUserCreation(bulkCustomUserResponseDTO)) {
+                mailService.sendBulkUserCreationNotification(bulkCustomUserResponseDTO, bulkUserCreationDTO.getEmail());
+
+                try {
+                    TimeUnit timeUnit = otpUtil.getOtpTimeUnit();
+                    redisUtil.putValueWithExpireTime("bulk_user_status", toJson(bulkCustomUserResponseDTO), propMapping.getOtpTtlDuration(), timeUnit);
+                } catch (Exception e) {
+                    log.error("Error while saving bulk user creation details in redis cache", e);
+                }
+            }
+        }
+    }
+
+    private boolean processHasuraUserCreation(BulkCustomUserResponseDTO bulkCustomUserResponseDTO) {
+        if (bulkCustomUserResponseDTO != null && bulkCustomUserResponseDTO.getSucceedUser() != null
+                && !bulkCustomUserResponseDTO.getSucceedUser().isEmpty()) {
+
+            List<CustomUserResponseDTO> succeedUserList = bulkCustomUserResponseDTO.getSucceedUser();
+
+            List<RegulatorDTO> regulatorDTOList = succeedUserList.stream()
+                    .filter(succeedUser -> !"Assessor".equalsIgnoreCase(succeedUser.getRoleName()))
+                    .map(succeedUser -> RegulatorDTO.builder()
+                            .user_id(succeedUser.getUserId())
+                            .phonenumber(succeedUser.getPhoneNumber())
+                            .email(succeedUser.getEmail())
+                            .full_name(succeedUser.getFirstName() + " " + succeedUser.getLastName())
+                            .lname(succeedUser.getLastName())
+                            .fname(succeedUser.getFirstName())
+                            .role(succeedUser.getRoleName())
+                            .workingstatus("valid")
+                            .build())
+                    .collect(Collectors.toList());
+
+            List<AssessorDTO> assessorDTOList = succeedUserList.stream()
+                    .filter(succeedUser -> "Assessor".equalsIgnoreCase(succeedUser.getRoleName()))
+                    .map(succeedUser -> AssessorDTO.builder()
+                            .user_id(succeedUser.getUserId())
+                            .phonenumber(succeedUser.getPhoneNumber())
+                            .email(succeedUser.getEmail())
+                            .name(succeedUser.getFirstName() + " " + succeedUser.getLastName())
+                            .lname(succeedUser.getLastName())
+                            .fname(succeedUser.getFirstName())
+                            .role(succeedUser.getRoleName())
+                            .code(succeedUser.getCode())
+                            .build())
+                    .collect(Collectors.toList());
+
+            HasuraUserRequestDTO hasuraUserRequestDTO = HasuraUserRequestDTO.builder()
+                    .assessors(assessorDTOList)
+                    .regulators(regulatorDTOList)
+                    .build();
+
+            return generateHasuraUser(hasuraUserRequestDTO);
+        }
+
+        return false;
+    }
+
+    private boolean generateHasuraUser(HasuraUserRequestDTO hasuraUserRequestDTO) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Authorization", "Bearer " + propMapping.getHasuraAccessToken());
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            JsonNode jsonNodeObject = mapper.convertValue(hasuraUserRequestDTO, JsonNode.class);
+
+            ResponseEntity response = restTemplate.exchange(propMapping.getHasuraBulkUserCreateAPI(), HttpMethod.POST,
+                    new HttpEntity<>(jsonNodeObject, headers), String.class);
+
+            if (response.getStatusCode() == HttpStatus.OK) {
+                return true;
+            }
+        } catch (Exception e) {
+            log.error(">>>>>>>>>>>> Error while generating user in hasura ", e);
+        }
+
+        return false;
+    }
+
+
+
+    private String toJson(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            // Handle the exception
+            return null;
+        }
+    }
+
+    public BulkCustomUserResponseDTO getBulkUserStatus(){
+
+        try {
+            String bulkUserStatus = redisUtil.getValue("bulk_user_status");
+
+            BulkCustomUserResponseDTO bulkCustomUserResponseDTO = fromJson(bulkUserStatus, BulkCustomUserResponseDTO.class);
+
+            return bulkCustomUserResponseDTO;
+        } catch (Exception e) {
+            log.error("Error while getting bulk user data from redis cache", e);
+            throw new CustomException("Unable to fetch bulk user creation data");
+        }
+    }
+
+    private <T> T fromJson(String json, Class<T> valueType) {
+        try {
+            return objectMapper.readValue(json, valueType);
+        } catch (JsonProcessingException e) {
+            // Handle the exception
+            return null;
+        }
+    }
+
+    public BulkCustomUserResponseDTO processAffliationBulkUserData(List<CustomUserDTO> bulkUserDTOList) {
+        BulkCustomUserResponseDTO bulkCustomUserResponseDTO = new BulkCustomUserResponseDTO();
+        List<CustomUserResponseDTO> succeedUserList = new ArrayList<>();
+        List<CustomUserResponseDTO> failedUserList = new ArrayList<>();
+
+        for (CustomUserDTO customUserDTO : bulkUserDTOList) {
+            CustomUserResponseDTO customUserResponseDTO = CustomUserResponseDTO.builder()
+                    .email(customUserDTO.getEmail())
+                    .firstName(customUserDTO.getFirstName())
+                    .lastName(customUserDTO.getLastName())
+                    .roleName(customUserDTO.getRoleName())
+                    .code(customUserDTO.getCode())
+                    .phoneNumber(customUserDTO.getPhoneNumber())
+                    .build();
+
+            if (isUserExist(customUserDTO.getUsername())) {
+                LOGGER.error(">>> User is already exist in user management");
+                customUserResponseDTO.setStatus("Faild to create user - User is already exist in user management DB");
+                failedUserList.add(customUserResponseDTO);
+            } else {
+                UserRepresentation userRepresentation = new UserRepresentation();
+                userRepresentation.setUsername(customUserDTO.getUsername());
+                userRepresentation.setFirstName(customUserDTO.getFirstName());
+                userRepresentation.setLastName(customUserDTO.getLastName());
+                userRepresentation.setEmail(customUserDTO.getEmail());
+                userRepresentation.setCredentials(Collections.singletonList(createPasswordCredentials(customUserDTO.getPassword())));
+                userRepresentation.setEnabled(true);
+
+                Map<String, List<String>> customAttributes = new HashMap<>();
+                customAttributes.put(UserConstant.ROLE_NAME, Collections.singletonList(customUserDTO.getRoleName()));
+                customAttributes.put(UserConstant.PHONE_NUMBER, Collections.singletonList(customUserDTO.getPhoneNumber()));
+
+                userRepresentation.setAttributes(customAttributes);
+
+                try {
+                    Response response = getSystemUsersResource().create(userRepresentation);
+
+                    if (response.getStatus() == HttpStatus.CREATED.value()) {
+//                        String userId = assignCustomUserRole(customUserDTO);
+                        persistUserDetailsWithCredentials(customUserDTO);
+
+                        customUserResponseDTO.setUserId(getKeycloakUserId(customUserDTO.getUsername()));
+                        customUserResponseDTO.setStatus("User has been created successfully - mail in progress");
+                        succeedUserList.add(customUserResponseDTO);
+                    } else {
+                        LOGGER.error("Unable to create custom user, systemKeycloak response - " + response.getStatusInfo());
+
+                        customUserResponseDTO.setStatus("Faild to create user - Unable to create user in keycloak: " + response.getStatus());
+                        failedUserList.add(customUserResponseDTO);
+//                    throw new KeycloakUserException("Unable to create custom user in keycloak directory: " + response.getStatusInfo());
+                    }
+                } catch (Exception e) {
+//                    LOGGER.error("Unable to create custom user in systemKeycloak", e.getMessage());
+                    customUserResponseDTO.setStatus("Faild to create user");
+                    failedUserList.add(customUserResponseDTO);
+//                throw new KeycloakUserException("Unable to create custom user - error message: " + e.getMessage());
+                }
+            }
+        }
+
+        bulkCustomUserResponseDTO.setSucceedUser(succeedUserList);
+        bulkCustomUserResponseDTO.setFailedUser(failedUserList);
+
+//        processUserCreationMailNotification(bulkCustomUserResponseDTO);
+
+        return bulkCustomUserResponseDTO;
+    }
+
+    private String getKeycloakUserId(String username) {
+        List<UserRepresentation> userRepresentationList = getUserDetails(username);
+
+        if (userRepresentationList != null && !userRepresentationList.isEmpty()) {
+            Optional<UserRepresentation> userRepresentationOptional = userRepresentationList.stream().findFirst();
+
+            if (userRepresentationOptional.isPresent()) {
+                return userRepresentationOptional.get().getId();
+            } else {
+                throw new UserNotFoundException("Unable to find user id for : " + username);
+            }
+        } else {
+            throw new UserNotFoundException("Unable to find user for : " + username);
         }
     }
 
