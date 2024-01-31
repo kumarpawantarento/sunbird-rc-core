@@ -1126,4 +1126,23 @@ public class UserService {
         return substring;
     }
 
+    /**
+     * get user by keycloak ID
+     * @param userId
+     * @return
+     */
+    public UserResource getUserDetailsById(String userId) {
+        UserResource search = getSystemUsersResource().get(userId);
+        LOGGER.info("get user details - {}", search);
+        return search;
+    }
+
+    /**
+     * log out user
+     * @param userId
+     */
+    public void logout(String userId) {
+        UserResource userDetailsById = getUserDetailsById(userId);
+        userDetailsById.logout();
+    }
 }

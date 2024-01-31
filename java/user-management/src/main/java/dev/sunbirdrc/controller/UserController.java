@@ -7,25 +7,14 @@ import dev.sunbirdrc.entity.UserDetails;
 import dev.sunbirdrc.service.MailService;
 import dev.sunbirdrc.service.UserService;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.spec.SecretKeySpec;
 import javax.validation.Valid;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.security.Provider;
-import java.security.Security;
+import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.NotNull;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -46,6 +35,14 @@ public class UserController {
         UserTokenDetailsDTO keycloakTokenDetailsDTO = userService.loginAndGenerateKeycloakToken(userLoginDTO);
         log.info("RC UM controller | method - login - end | response - {}", keycloakTokenDetailsDTO);
         return new ResponseEntity<>(keycloakTokenDetailsDTO, HttpStatus.OK);
+    }
+
+    @GetMapping("/logout/{userId}")
+    public ResponseEntity<String> logoutUser(@Valid @NotNull @NotEmpty @PathVariable String userId) {
+        log.info("RC UM controller | method - logout - start - userId - {}", userId);
+        userService.logout(userId);
+        log.info("RC UM controller | method - logout - end | response - {}", "success");
+        return new ResponseEntity<>("Success", HttpStatus.OK);
     }
 
     @PostMapping("/registerUser")
