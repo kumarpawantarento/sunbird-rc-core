@@ -436,9 +436,9 @@ public class UserService {
         }else {
             BulkCustomUserResponseDTO bulkCustomUserResponseDTO = processAffliationBulkUserData(bulkUserCreationDTO.getUserCreationList());
 
-            if (processHasuraUserCreation(bulkCustomUserResponseDTO)) {
-                mailService.sendBulkUserCreationNotification(bulkCustomUserResponseDTO, bulkUserCreationDTO.getEmail());
+            mailService.sendBulkUserCreationNotification(bulkCustomUserResponseDTO, bulkUserCreationDTO.getEmail());
 
+            if (processHasuraUserCreation(bulkCustomUserResponseDTO)) {
                 try {
                     TimeUnit timeUnit = otpUtil.getOtpTimeUnit();
                     redisUtil.putValueWithExpireTime("bulk_user_status", toJson(bulkCustomUserResponseDTO), propMapping.getOtpTtlDuration(), timeUnit);
