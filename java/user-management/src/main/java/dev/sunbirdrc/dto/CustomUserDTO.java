@@ -36,4 +36,6 @@ public class CustomUserDTO {
 
     @NotBlank(message = "code is required field")
     private String code;
+
+    private String status;
 }

@@ -82,6 +82,9 @@ public class PropertiesValueMapper {
     @Value("${hasura.bulk.user.create.api}")
     private String hasuraBulkUserCreateAPI;
 
+    @Value("${hasura.user.check.api}")
+    private String hasuraUserCheckAPI;
+
     @Override
     public String toString() {
         return "PropertiesValueMapper{" +

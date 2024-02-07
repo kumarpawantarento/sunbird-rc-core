@@ -15,4 +15,6 @@ public class UserConstant {
 
     public final static String CUSTOM_USER_KEY_SALT = "#UPSMF#";
     public final static String SECRET_KEY_FACTORY_ALGO = "PBKDF2WithHmacSHA1";
+    public final static String MODULE = "Module";
+    public final static String ASSESSOR_ROLE = "Assessor";
 }

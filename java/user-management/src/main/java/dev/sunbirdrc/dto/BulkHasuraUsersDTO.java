@@ -7,11 +7,11 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-@NoArgsConstructor
 @AllArgsConstructor
 @Data
 @Builder
-public class HasuraUserRequestDTO {
-    private List<RegulatorDTO> regulators;
-    private List<AssessorDTO> assessors;
+@NoArgsConstructor
+public class BulkHasuraUsersDTO {
+    private List<CustomUserDTO> exitedUsers;
+    private List<CustomUserDTO> newUsers;
 }
