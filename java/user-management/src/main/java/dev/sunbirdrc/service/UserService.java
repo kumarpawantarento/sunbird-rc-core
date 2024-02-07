@@ -1315,10 +1315,10 @@ public class UserService {
         UserResource userDetailsById = getUserDetailsById(userId);
         userDetailsById.logout();
         // invalidate user token
-        invalidateUserToken(headers);
+        invalidateUserToken(headers, userDetailsById);
     }
 
-    private void invalidateUserToken(Map<String, String> headers) {
+    private void invalidateUserToken(Map<String, String> headers, UserResource userResource) {
         LOGGER.info("LOG OUT METHOD - Header Map - {}", headers);
         if(headers!= null && !headers.isEmpty()) {
             String authorization = headers.get(HEADER_X_USER_TOKEN);
@@ -1337,6 +1337,14 @@ public class UserService {
                 LOGGER.info("LOG OUT METHOD - revoking token ");
                 // revoke token
                 keycloakConfig.systemKeycloak().tokenManager().invalidate(authorization);
+                // remove token from REDIS
+                LOGGER.info("LOG OUT METHOD - revoking token | user representation - {} ", userResource.toRepresentation());
+                if(userResource.toRepresentation() != null
+                        && userResource.toRepresentation().getUsername() != null
+                        && !userResource.toRepresentation().getUsername().isEmpty()) {
+                    redisUtil.removeKey(userResource.toRepresentation().getUsername());
+                }
+                LOGGER.info("LOG OUT METHOD - token removed from REDIS");
                 LOGGER.info("LOG OUT METHOD - token revoked");
             }
         }

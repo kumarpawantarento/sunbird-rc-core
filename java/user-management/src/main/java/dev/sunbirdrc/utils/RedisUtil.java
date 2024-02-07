@@ -33,4 +33,8 @@ public class RedisUtil {
     public String getValue(String key) {
         return customRedis.opsForValue().get(key);
     }
+
+    public Boolean removeKey(String key) {
+        return customRedis.delete(key);
+    }
 }
