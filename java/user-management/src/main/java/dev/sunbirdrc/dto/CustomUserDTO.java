@@ -30,4 +30,12 @@ public class CustomUserDTO {
 
     @NotBlank(message = "roleName is required field")
     private String roleName;
+
+    @NotBlank(message = "phoneNumber is required field")
+    private String phoneNumber;
+
+    @NotBlank(message = "code is required field")
+    private String code;
+
+    private String status;
 }

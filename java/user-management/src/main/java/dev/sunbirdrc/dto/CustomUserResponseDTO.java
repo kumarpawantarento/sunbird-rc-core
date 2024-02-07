@@ -14,4 +14,6 @@ public class CustomUserResponseDTO {
     private String lastName;
     private String roleName;
     private String status;
+    private String phoneNumber;
+    private String code;
 }

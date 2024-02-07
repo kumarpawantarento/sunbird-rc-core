@@ -118,6 +118,21 @@ public class UserController {
         return new ResponseEntity<>(bulkCustomUserResponseDTO, HttpStatus.CREATED);
     }
 
+    @PostMapping("/keycloak/pushBulkUserBG")
+    public ResponseEntity<String> pushBulkUserBG(@Valid @RequestBody BulkUserCreationDTO bulkUserCreationDTO) {
+        userService.pushBulkUserBG(bulkUserCreationDTO);
+
+        return new ResponseEntity<>("{\"success\":true,\"message\":\"Aknowledged\"}", HttpStatus.OK);
+    }
+
+    @GetMapping("/keycloak/bulkUserStatus")
+    public ResponseEntity<BulkCustomUserResponseDTO> bulkUserStatus() {
+        BulkCustomUserResponseDTO bulkCustomUserResponseDTO = userService.getBulkUserStatus();
+
+        return new ResponseEntity<>(bulkCustomUserResponseDTO, HttpStatus.CREATED);
+    }
+
+
     @PostMapping("/user/generateOtp")
     public ResponseEntity<String> generateUserOtp(@Valid @RequestBody CustomUsernameDTO customUsernameDTO) {
         log.info("RC UM controller | method - user generate OTP - start");

@@ -76,6 +76,15 @@ public class PropertiesValueMapper {
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
     private String jwtIssuerUrl;
 
+    @Value("${hasura.access.token}")
+    private String hasuraAccessToken;
+
+    @Value("${hasura.bulk.user.create.api}")
+    private String hasuraBulkUserCreateAPI;
+
+    @Value("${hasura.user.check.api}")
+    private String hasuraUserCheckAPI;
+
     @Override
     public String toString() {
         return "PropertiesValueMapper{" +

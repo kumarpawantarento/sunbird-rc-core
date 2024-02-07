@@ -1,6 +1,7 @@
 package dev.sunbirdrc.service;
 
 import dev.sunbirdrc.config.PropertiesValueMapper;
+import dev.sunbirdrc.dto.BulkCustomUserResponseDTO;
 import dev.sunbirdrc.dto.CustomUserDTO;
 import dev.sunbirdrc.entity.UserDetails;
 import dev.sunbirdrc.exception.OtpException;
@@ -132,6 +133,48 @@ public class MailService {
 
         freeMarkerConfiguration.setClassForTemplateLoading(this.getClass(), "/templates/");
         Template template = freeMarkerConfiguration.getTemplate("user-creation-notification-mail.ftl");
+
+        try {
+            processedTemplateString = FreeMarkerTemplateUtils.processTemplateIntoString(template, mailMap);
+        } catch (TemplateException e) {
+            logger.error("Error while creating notification mail template for request info");
+            throw new Exception("Error while creating notification mail template for request info");
+        }
+
+        return processedTemplateString;
+    }
+
+    @Async
+    public void sendBulkUserCreationNotification(BulkCustomUserResponseDTO bulkCustomUserResponseDTO, String email) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+
+            MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
+
+            mimeMessageHelper.setSubject(propMapping.getCustomUserCreationSubject());
+            mimeMessageHelper.setFrom(new InternetAddress(propMapping.getCustomUserCreationFromAddress(),
+                    propMapping.getCustomUserCreationPersonalName()));
+            mimeMessageHelper.setTo(email);
+            mimeMessageHelper.setText(generateBulkUserNotificationMailContent(bulkCustomUserResponseDTO), true);
+
+            mailSender.send(mimeMessageHelper.getMimeMessage());
+        } catch (Exception e) {
+            logger.error("Exception while sending user creation mail notification: ", e);
+//            throw new Exception("Exception while composing and sending user creation mail notification");
+        }
+    }
+
+    private String generateBulkUserNotificationMailContent(BulkCustomUserResponseDTO bulkCustomUserResponseDTO) throws Exception {
+        String processedTemplateString = null;
+
+
+        Map<String, Object> mailMap = new HashMap<>();
+        mailMap.put("succeedUsers", bulkCustomUserResponseDTO.getSucceedUser());
+        mailMap.put("failedUsers", bulkCustomUserResponseDTO.getFailedUser());
+        mailMap.put("signature", "UPSMF");
+
+        freeMarkerConfiguration.setClassForTemplateLoading(this.getClass(), "/templates/");
+        Template template = freeMarkerConfiguration.getTemplate("bulk-user-creation-notification-mail.ftl");
 
         try {
             processedTemplateString = FreeMarkerTemplateUtils.processTemplateIntoString(template, mailMap);
