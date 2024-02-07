@@ -17,6 +17,7 @@ import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping(path = "/api/v1")
@@ -38,9 +39,10 @@ public class UserController {
     }
 
     @GetMapping("/logout/{userId}")
-    public ResponseEntity<String> logoutUser(@Valid @NotNull @NotEmpty @PathVariable String userId) {
+    public ResponseEntity<String> logoutUser(@Valid @NotNull @NotEmpty @PathVariable String userId,
+                                             @RequestHeader Map<String, String> headers) {
         log.info("RC UM controller | method - logout - start - userId - {}", userId);
-        userService.logout(userId);
+        userService.logout(userId, headers);
         log.info("RC UM controller | method - logout - end | response - {}", "success");
         return new ResponseEntity<>("Success", HttpStatus.OK);
     }

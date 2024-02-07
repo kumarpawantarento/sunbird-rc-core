@@ -13,6 +13,7 @@ import dev.sunbirdrc.repository.UserCredentialRepository;
 import dev.sunbirdrc.repository.UserDetailsRepository;
 import dev.sunbirdrc.utils.CipherEncoder;
 import dev.sunbirdrc.utils.OtpUtil;
+import dev.sunbirdrc.utils.RedisUtil;
 import dev.sunbirdrc.utils.UserConstant;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.ClientsResource;
@@ -28,6 +29,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.NonNull;
@@ -44,13 +48,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
 public class UserService {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
-
+    public static final String HEADER_X_USER_TOKEN = "x-user-token";
+    public static final String AUTH_KEY_BEARER = "Bearer";
     @Autowired
     private KeycloakConfig keycloakConfig;
 
@@ -84,6 +89,12 @@ public class UserService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    RedisUtil redisUtil;
+
+    @Value("${redis.token.expiry.in.minutes}")
+    private long redisTokenExpiryInMinutes;
 
     public UsersResource getSystemUsersResource(){
         LOGGER.info("getting system keycloak resource");
@@ -153,6 +164,9 @@ public class UserService {
                             .getUserKeycloak(userLoginDTO.getUsername(), userLoginDTO.getPassword()).tokenManager();
 
                     AccessTokenResponse accessTokenResponse = tokenManager.getAccessToken();
+
+                    // save token in redis with key as username
+                    redisUtil.putValueWithExpireTime(userLoginDTO.getUsername(), accessTokenResponse.getToken(), redisTokenExpiryInMinutes, TimeUnit.MINUTES);
 
                     return UserTokenDetailsDTO.builder()
                             .accessToken(accessTokenResponse.getToken())
@@ -908,8 +922,34 @@ public class UserService {
      * log out user
      * @param userId
      */
-    public void logout(String userId) {
+    public void logout(String userId, Map<String, String> headers) {
         UserResource userDetailsById = getUserDetailsById(userId);
         userDetailsById.logout();
+        // invalidate user token
+        invalidateUserToken(headers);
+    }
+
+    private void invalidateUserToken(Map<String, String> headers) {
+        LOGGER.info("LOG OUT METHOD - Header Map - {}", headers);
+        if(headers!= null && !headers.isEmpty()) {
+            String authorization = headers.get(HEADER_X_USER_TOKEN);
+            LOGGER.info("LOG OUT METHOD - Header Map - auth key {}", authorization);
+            if(authorization != null && !authorization.isBlank()) {
+                if(authorization.trim().startsWith(AUTH_KEY_BEARER)){
+                    LOGGER.info("LOG OUT METHOD - auth key start with Bearer - {}", authorization);
+                    int separatorIndex = authorization.trim().indexOf(" ");
+                    LOGGER.info("LOG OUT METHOD - auth key start with Bearer - trim bearer | space index - {}", separatorIndex);
+                    if(separatorIndex > 0 && separatorIndex < authorization.trim().length()) {
+                        authorization = authorization.trim().substring(separatorIndex+1);
+                        LOGGER.info("LOG OUT METHOD - auth key start without Bearer - {}", authorization);
+                    }
+                }
+                LOGGER.info("LOG OUT METHOD - auth key final - {}", authorization);
+                LOGGER.info("LOG OUT METHOD - revoking token ");
+                // revoke token
+                keycloakConfig.systemKeycloak().tokenManager().invalidate(authorization);
+                LOGGER.info("LOG OUT METHOD - token revoked");
+            }
+        }
     }
 }
